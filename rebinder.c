@@ -31,17 +31,22 @@ struct __packed root {
    struct __packed {
        uint8_t len;        // 5
        uint8_t data[5];    // 'r' 'b' 'n' 'd' 'r'
+   } sub;
+   struct __packed {
+       uint8_t len;        // 5
+       uint8_t data[5];    // 's' 'n' 'u' 't' 't'
    } domain;
    struct __packed {
-       uint8_t len;        // 2
-       uint8_t data[2];    // 'u' 's'
+       uint8_t len;        // 3
+       uint8_t data[3];    // 'o' 'r' 'g'
    } tld;
    uint8_t root;           // 0
 };
 
 static const struct root kExpectedDomain = {
-   .domain = { 5, { 'r', 'b', 'n', 'd', 'r' } },
-   .tld    = { 2, { 'u', 's' } },
+   .sub    = { 5, { 'r', 'b', 'n', 'd', 'r' } },
+   .domain = { 5, { 's', 'n', 'u', 't', 't' } },
+   .tld    = { 3, { 'o', 'r', 'g' } },
    .root   = 0,
 };
 
@@ -108,6 +113,8 @@ int main(int argc, char **argv)
     socklen_t addrlen;
     time_t querytime;
     int sockfd;
+
+    uint16_t cycle = 0;     // used to "randomize" which reply is returned
 
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         err(EXIT_FAILURE, "failed to create socket");
@@ -207,7 +214,7 @@ int main(int argc, char **argv)
 
         // Make sure the root matches.
         if (memcmp(&query.labels.domain, &kExpectedDomain, sizeof kExpectedDomain) != 0) {
-            warnx("query for unrecognised domain (must be .rbndr.us)");
+            warnx("query for unrecognised domain (must be .rbndr.snutt.org)");
             reply.flags.rcode = ns_r_nxdomain; //lint !e641
             goto error;
         }
@@ -219,7 +226,9 @@ int main(int argc, char **argv)
         }
 
         // Choose a random label to return based on ID.
-        if (!parse_ip4_label(&reply.rdata, (query.id & 1) ? query.labels.primary.label : query.labels.secondary.label)) {
+        cycle = cycle ^ 1;      // Predictable round-robin algo
+        //cycle = query.id;     // Original algo, "random"
+        if (!parse_ip4_label(&reply.rdata, (cycle & 1) ? query.labels.primary.label : query.labels.secondary.label)) {
             warnx("client provided an invalid ip4 address, ignoring reqest");
             reply.flags.rcode = ns_r_nxdomain; //lint !e641
             goto error;
